@@ -65,7 +65,9 @@
 #include <TVectorD.h>
 #include <Math/VectorUtil.h>
 
-
+#include "CondFormats/JetMETObjects/interface/JetCorrectorParameters.h"
+#include "CondFormats/JetMETObjects/interface/JetCorrectionUncertainty.h"
+#include "JetMETCorrections/Objects/interface/JetCorrectionsRecord.h"
 //trigger info
 #include "FWCore/Common/interface/TriggerNames.h"
 #include "DataFormats/Common/interface/TriggerResults.h"
@@ -86,6 +88,8 @@
 #include "DataFormats/TrackReco/interface/TrackBase.h"   //djs
 #include "DataFormats/GsfTrackReco/interface/GsfTrack.h"  //djs
 #include "DataFormats/GsfTrackReco/interface/GsfTrackFwd.h"
+
+#include "DataFormats/JetReco/interface/PileupJetIdentifier.h"
 
 #include "DataFormats/EgammaCandidates/interface/GsfElectron.h"
 #include "DataFormats/EgammaCandidates/interface/GsfElectronFwd.h"
@@ -273,7 +277,7 @@ const double
   CUT_MUON_DXY = 0.02,
   CUT_DELTAZ = 0.05,
   CUT_JET_PT = 20.,
-  CUT_JET_ETA = 2.4,
+  CUT_JET_ETA = 5.2,
   CUT_NEUTR_EM_EN_FRAC = 0.99,
   CUT_CHARG_EM_EN_FRAC = 0.99,
   CUT_NEUTR_HAD_EN_FRAC = 0.99,
@@ -292,7 +296,7 @@ const double
   MATCH_DELTA_R_BJET = 0.10,
   MATCH_DELTA_R_FLVR = 0.475,
   MATCH_VERTEX_DZ = 0.05,
-  MATCH_DELTA_R_E_MU = 0.10,
+  MATCH_DELTA_R_E_MU = 0.30,
   HT_MIN = 100.,
   HT_MAX = 1600.,  //1100.
   MT_MIN = 0.,
@@ -331,7 +335,7 @@ string TriggerSingleElectron="HLT_Ele27_WP80_v";
 // these will change depending on the MC used
 
 // for 2011 madgraph ZMuMu
-
+/*
      const double weights[]={
 	2.18044,
 	0.75958,
@@ -423,7 +427,7 @@ string TriggerSingleElectron="HLT_Ele27_WP80_v";
 	0.893623,
 	0.,
 1.44171};
-
+*/
 
 /*
 const double weights [50] = {
@@ -762,7 +766,7 @@ const double weights [70] ={
 };
 */
 //for ttbar
-/*
+
 const double weights [70] ={
 
 0.0269952,
@@ -836,7 +840,7 @@ const double weights [70] ={
 0,
 0
 };
-*/
+
 //for WW
 /*
 const double weights[70] = {
@@ -1189,7 +1193,7 @@ const char* VERTEX_COLLECTION = "offlinePrimaryVertices";
 const char* ELEC_COLLECTION = "gsfElectrons";
 const char* MUON_COLLECTION = "muons";
 //const char* FLAVOUR_COLLECTION = "GenJetbyValAlgo";
-const char* JET_COLLECTION = "ak5PFJetsL1FastL2L3";
+const char* JET_COLLECTION = "ak5PFJetsCorr";
 //const char* JET_COLLECTION = "ak5PFJets";
 //const char* BTAG_COLLECTION = "newTrackCountingHighEffBJetTags";
 //const char* CORR_COLLECTION = "AK5PF";
@@ -1391,6 +1395,7 @@ private:
   bool match_to_vtx(PFJet);
   
   void load_prep();
+  void load_pfParticles(const Event&);
   void load_beam(const Event&);
   void load_rMET(const Event&);
   void load_leps(const Event&);
@@ -1476,6 +1481,14 @@ virtual TLorentzVector GetReducedMET(TLorentzVector sumJet, TLorentzVector lep1,
   int nPUVertices;
   int nPUVerticesTrue;
   //int num_btags;
+  std::vector<std::vector<float>> PFJet_p4;
+  std::vector<float> PFJet_PUJetID_discr;
+  std::vector<float> PFJet_PUJetID_looseWP;
+  std::vector<float> PFJet_PUJetID_mediumWP;
+  std::vector<float> PFJet_PUJetID_tightWP;
+  std::vector<float> PFJet_JECuncertainty;
+  std::vector<float> PFJet_JECruns;
+  std::vector<std::vector<float>> PFJet_GenJet_p4;
   int num_bjets;
   int num_jets;
   
@@ -1530,6 +1543,13 @@ virtual TLorentzVector GetReducedMET(TLorentzVector sumJet, TLorentzVector lep1,
   int num_uds_g;
   int num_unfound;
   int num_0flavor;
+
+  double pf_ch;
+  double pf_nh;
+  double pf_em;
+  int Npfch;
+  int Npfnh;
+  int Npfem;
 
   double MCrapid;
   int numberjets;
@@ -1598,6 +1618,8 @@ virtual TLorentzVector GetReducedMET(TLorentzVector sumJet, TLorentzVector lep1,
   TString Name_h[N_HIST];
   TString Title_h[N_HIST];
   string hlTriggerResults_; 
+  std::string JECuncData_;
+  std::string JECuncMC_;
   double mET_x;
   double mET_y;
   double mET;

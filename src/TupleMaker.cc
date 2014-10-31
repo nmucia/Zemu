@@ -214,14 +214,15 @@ void TupleMaker::setup_histograms(const ParameterSet& config_)
 
   //     partFlowTag_ = config_.getUntrackedParameter<edm::InputTag>("partFlowTag");
 
-
+  JECuncData_ = (config_.getUntrackedParameter<std::string>("JECuncData"));
+	  JECuncMC_ = (config_.getUntrackedParameter<std::string>("JECuncMC"));
   hlTriggerResults_ = config_.getUntrackedParameter<string>("HLTriggerResults","TriggerResults");
-  inputTagIsoDepElectrons_ = config_.getParameter< std::vector<edm::InputTag> >("IsoDepElectron");
-   inputTagIsoDepPhotons_ = config_.getParameter< std::vector<edm::InputTag> >("IsoDepPhoton");
+  // inputTagIsoDepElectrons_ = config_.getParameter< std::vector<edm::InputTag> >("IsoDepElectron");
+  //  inputTagIsoDepPhotons_ = config_.getParameter< std::vector<edm::InputTag> >("IsoDepPhoton");
   // No longer needed. e/g recommendation (04/04/12)
   //  inputTagIsoValElectronsNoPFId_ = iConfig.getParameter< std::vector<edm::InputTag> >("IsoValElectronNoPF");
-  inputTagIsoValElectronsPFId_   = config_.getParameter< std::vector<edm::InputTag> >("IsoValElectronPF");   
-  inputTagIsoValPhotonsPFId_   = config_.getParameter< std::vector<edm::InputTag> >("IsoValPhoton");   
+  //inputTagIsoValElectronsPFId_   = config_.getParameter< std::vector<edm::InputTag> >("IsoValElectronPF");   
+  //inputTagIsoValPhotonsPFId_   = config_.getParameter< std::vector<edm::InputTag> >("IsoValPhoton");   
 
  
   Service<TFileService> fs;
@@ -426,7 +427,22 @@ void TupleMaker::setup_histograms(const ParameterSet& config_)
  tree->Branch("motherId1", &motherId1 , "motherId1/D");
  tree->Branch("motherId2", &motherId2 , "motherId2/D");
  tree->Branch("eff1", &eff1 , "eff1/I");
- 
+ tree->Branch("PFJet_p4", &PFJet_p4);
+ tree->Branch("PFJet_PUJetID_discr", &PFJet_PUJetID_discr);
+ tree->Branch("PFJet_PUJetID_looseWP", &PFJet_PUJetID_looseWP);
+ tree->Branch("PFJet_PUJetID_mediumWP", &PFJet_PUJetID_mediumWP);
+ tree->Branch("PFJet_PUJetID_tightWP", &PFJet_PUJetID_tightWP);
+ tree->Branch("PFJet_JECuncertainty", &PFJet_JECuncertainty);
+ tree->Branch("PFJet_JECruns", &PFJet_JECruns);
+ tree->Branch("PFJet_GenJet_p4", &PFJet_GenJet_p4);
+ tree->Branch("pf_ch", &pf_ch, "pf_ch/D");
+ tree->Branch("pf_nh", &pf_nh, "pf_nh/D");
+ tree->Branch("pf_em", &pf_em, "pf_em/D");
+ tree->Branch("Npfch", &Npfch, "Npfch/I");
+ tree->Branch("Npfnh", &Npfnh, "Npfnh/I");
+ tree->Branch("Npfem", &Npfem, "Npfem/I");
+
+
  // these are variables for the W study with isolation 8/2/14
  /*
 tree->Branch("Npt", &Npt , "Npt/D");
@@ -552,6 +568,7 @@ void TupleMaker::analyze(const Event& event_, const EventSetup& setup_)
   d_xy=1.0;
   numVH=0;
   numPH=0;
+  Npfch=Npfnh=Npfem=0;
   lep1dxy=lep2dxy=.3;
   m_iso=1.0;
   lep1pt=lep2pt=0;
@@ -594,7 +611,7 @@ void TupleMaker::analyze(const Event& event_, const EventSetup& setup_)
     }  
   //comment the next few lines for running over data
   
-  //     load_pileup(event_);
+  //       load_pileup(event_);
   
   // cout<<weight<<endl;
   //  load_beam(event_);
@@ -607,7 +624,7 @@ void TupleMaker::analyze(const Event& event_, const EventSetup& setup_)
   //  load_Wacceptance(event_, setup_);
 	eff1=0;  
 
-	//	   load_acceptance(event_);
+	//		   load_acceptance(event_);
  
 
 
@@ -727,7 +744,9 @@ void TupleMaker::analyze(const Event& event_, const EventSetup& setup_)
    num_m = load_muon(event_);
 
   
-  load_triggers(event_);
+   load_triggers(event_);
+   
+   load_pfParticles(event_);
 
   // cout<<"hello"<<endl;
   //===========================  
@@ -740,7 +759,9 @@ METSignificance = (pfMEThandle->front() ).significance();
   //===========================
  
   num_e= load_elec(event_, setup_, num_m);
-  load_vtxs(event_);
+ 
+
+ load_vtxs(event_);
   // cout<<"hello"<<endl;
   
   InputTag  vertexLabel(string("offlinePrimaryVertices"));
@@ -1012,7 +1033,7 @@ METSignificance = (pfMEThandle->front() ).significance();
 
     load_jets(event_, setup_);
   
-      lepton_search(event_, setup_);
+         lepton_search(event_, setup_);
 
  // load_flvr(event_);
   // load_btag(event_);
@@ -1189,11 +1210,18 @@ void TupleMaker::load_NickAnalysis()
     l24vector->Clear();
     MC14vector->Clear();
     MC24vector->Clear();
-
-
+    PFJet_p4.clear();
+    PFJet_PUJetID_discr.clear();
+    PFJet_PUJetID_looseWP.clear();
+    PFJet_PUJetID_mediumWP.clear();
+    PFJet_PUJetID_tightWP.clear();
+    PFJet_JECuncertainty.clear();
+    PFJet_JECruns.clear();
+    PFJet_GenJet_p4.clear();
 }
 
 //===================================================================//
+
 void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
 {
   //currently there is incompatability between this module since I added running over electrons and muons. I think it is right below here where we specify muon_2 when there may not be one.
@@ -1230,11 +1258,11 @@ void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
       
       if(imuon->isGlobalMuon())
 	{
-	  if(imuon->isTrackerMuon() && imuon->pt()>8 && phi1<2.4 && get_m_iso(imuon) < .2)    
+	  if(imuon->isTrackerMuon() && imuon->pt()>10 && phil<2.4 && get_m_iso(imuon) < .3)    
 	    {
 	      if(DeltaRX(etal, eta1, phil, phi1) > .03 && DeltaRX(etal, eta2, phil, phi2) > .03)
 		{
-		      if( muon::isSoftMuon(*imuon, *primaryVtcs->begin())) 
+		      if( muon::isTightMuon(*imuon, *primaryVtcs->begin())) 
 			{
 		   Emuon_pt[extraMuons]=imuon->pt();
 		   Emuon_eta[extraMuons]=eta1;
@@ -1259,7 +1287,7 @@ void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
   
     //  evaluate_mvas(event_, setup_);
 
-  InputTag gsfEleLabel(string("gsfElectrons"));
+    InputTag gsfEleLabel("calibratedElectrons","calibratedGsfElectrons","");
   Handle<GsfElectronCollection> theEGammaCollection;
   event_.getByLabel(gsfEleLabel,theEGammaCollection);
   const GsfElectronCollection theEGamma = *(theEGammaCollection.product());
@@ -1268,9 +1296,9 @@ void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
   event_.getByLabel(inputTagPhotons_,photonH);
    
 
-  InputTag genLable(string("genParticles"));
-  Handle<GenParticleCollection> genParticles;
-  event_.getByLabel(genLable,genParticles);
+  // InputTag genLable(string("genParticles"));
+  // Handle<GenParticleCollection> genParticles;
+  //event_.getByLabel(genLable,genParticles);
   //InputTag  mcTruthLabel(string("generator"));
   //edm::Handle<edm::HepMCProduct> pMCTruth;
   //iEvent.getByLabel(mcTruthLabel,pMCTruth);
@@ -1333,6 +1361,17 @@ void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
   }
 
 
+edm::Handle<edm::ValueMap<double>> iso_charged_handle;
+event_.getByLabel(edm::InputTag("elPFIsoValueCharged04PFIdPFIso",""), iso_charged_handle);
+const edm::ValueMap<double> ele_iso_charged = (*iso_charged_handle.product());
+edm::Handle<edm::ValueMap<double>> iso_gamma_handle;
+event_.getByLabel(edm::InputTag("elPFIsoValueGamma04PFIdPFIso",""), iso_gamma_handle);
+const edm::ValueMap<double> ele_iso_gamma = (*iso_gamma_handle.product());
+edm::Handle<edm::ValueMap<double>> iso_neutral_handle;
+event_.getByLabel(edm::InputTag("elPFIsoValueNeutral04PFIdPFIso",""), iso_neutral_handle);
+const edm::ValueMap<double> ele_iso_neutral = (*iso_neutral_handle.product());
+
+
 //  IsoDepositMaps photonIsoDep(nTypes);
 //    for (size_t j = 0; j<inputTagIsoDepPhotons_.size(); ++j) {
 //      event_.getByLabel(inputTagIsoDepPhotons_[j], photonIsoDep[j]);
@@ -1349,10 +1388,10 @@ void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
 //    event_.getByLabel(inputTagIsoValPhotonsPFId_[j], photonIsoValPFId[j]);
 //  }
 
- 
+  Int_t eee=0; 
       for (uint j=0; j<theEGamma.size();j++)
   {
-
+    eee++;
     //cout<<ele_mvaTrigV0.get(j)<<endl;
 	  bool elePresel = trainTrigPresel(theEGamma[j]);
 
@@ -1373,7 +1412,7 @@ void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
 
       // cout<<ie.id()<<endl;
            phil = theEGamma[j].phi();
-	   etal = theEGamma[j].eta();
+	   etal = theEGamma[j].superCluster()->eta();
 
   
 	  
@@ -1383,101 +1422,110 @@ void TupleMaker::lepton_search(const Event& event_, const EventSetup& setup_ )
 
 
   
-		 if(theEGamma[j].pt()>10  && fabs(eta1)<2.4)
-{ // cout<<extraElectrons<<endl;
-  
-   if(DeltaRX(etal, eta1, phil, phi1) > .03 && DeltaRX(etal, eta2, phil, phi2) > .03)
-     {
-  if(elePresel)
-    {
-      
-      //cout<<charged<<" ,"<<photon<<" ,"<<neutral<<" the iso"<<iso<<endl;
-      // mvaTrigMthd1 = myMVATrigV0->mvaValue((theEGamma[j]),*pv,thebuilder,lazyTools,debugMVAclass);
-      
-      if((theEGamma[j].pt()<20&&((ele_mvaTrigV0.get(j)>0.00 && fabs(eta1)<.8) || (ele_mvaTrigV0.get(j)>.10 && (fabs(eta1)>.8 && fabs(eta1)<1.479)) || (ele_mvaTrigV0.get(j)>.62 && fabs(eta1)>1.479)))||((ele_mvaTrigV0.get(j)>.94 && fabs(eta1)<.8) || (ele_mvaTrigV0.get(j)>.85 && (fabs(eta1)>.8 && fabs(eta1)<1.479)) || (ele_mvaTrigV0.get(j)>.92 && fabs(eta1)>1.479)))
-	{
-	  double charged =  (*(*electronIsoVals)[0])[myElectronRef];
-	  double photon = (*(*electronIsoVals)[1])[myElectronRef];
-	  double neutral = (*(*electronIsoVals)[2])[myElectronRef];
-	  if(abs(etal)>2.4)
-	    Aeff=0.261;
-	  if(abs(etal)>2.3 && abs(etal)<2.4)
-	    Aeff=0.194;
-	  if(abs(etal)>2.2 && abs(etal)<2.3)
-	    Aeff=0.183;
-	  if(abs(etal)>2.0 && abs(etal)<2.2)
-	    Aeff=0.143;
-	  if(abs(etal)>1.479 && abs(etal)<2.0)
-	    Aeff=0.115;
-	  if(abs(etal)>1.0 && abs(etal)<1.479)
-	    Aeff=0.209;
-	  if(abs(etal)<1.0)
-	    Aeff=.208;
+		 if(theEGamma[j].pt()>10  && fabs(etal)<2.4)
+		   { // cout<<extraElectrons<<endl;
+		     
+		     if(DeltaRX(etal, eta1, phil, phi1) > .03 && DeltaRX(etal, eta2, phil, phi2) > .03)
+		       {
+			 if(elePresel)
+			   {
+			     
+			     //cout<<charged<<" ,"<<photon<<" ,"<<neutral<<" the iso"<<iso<<endl;
+			     // mvaTrigMthd1 = myMVATrigV0->mvaValue((theEGamma[j]),*pv,thebuilder,lazyTools,debugMVAclass);
+			     	 double trigValue=ele_mvaTrigV0.get(j);
+			 //	 cout<<trigValue<<endl;
+			 if((theEGamma[j].pt()<20&&((trigValue>0.00 && fabs(etal)<.8) || (trigValue>.10 && (fabs(etal)>.8 && fabs(eta1)<1.479)) || (trigValue>.62 && fabs(etal)>1.479)))||((trigValue>.94 && fabs(etal)<.8) || (trigValue>.85 && (fabs(etal)>.8 && fabs(etal)<1.479)) || (trigValue>.92 && fabs(etal)>1.479)))
+			   {
+
+			     double charged = ele_iso_charged.get(eee-1);
+			     double neutral = ele_iso_neutral.get(eee-1);
+			     double photon = ele_iso_gamma.get(eee-1);
+				 if(abs(etal)>2.4)
+				   Aeff=0.261;
+				 if(abs(etal)>2.3 && abs(etal)<2.4)
+				   Aeff=0.194;
+				 if(abs(etal)>2.2 && abs(etal)<2.3)
+				   Aeff=0.183;
+				 if(abs(etal)>2.0 && abs(etal)<2.2)
+				   Aeff=0.143;
+				 if(abs(etal)>1.479 && abs(etal)<2.0)
+				   Aeff=0.115;
+				 if(abs(etal)>1.0 && abs(etal)<1.479)
+				   Aeff=0.209;
+				 if(abs(etal)<1.0)
+				   Aeff=.208;
+				 
+				 
+				 
 	  
+				 
+				 
+				 
 	  
-	  
-	  
-	  
-	  
-	  
-	  
-	  double iso =(charged+max(photon+neutral-_Rho*Aeff,0.0))/theEGamma[j].pt();
-	  
-	  if(iso<.15)
-	    {
-	      //calculate sip
-	      float ip3d    = -999.0;
-	      float ip3derr = 1.0;
-	      float ip3dSig = 0.0;
-	      
-	       if (theEGamma[j].gsfTrack().isNonnull()) {
-		 const double gsfsign = ( (-theEGamma[j].gsfTrack()->dxy(pv->position())) >=0 ) ? 1. : -1.;
-		 
-		 
-		 const reco::TransientTrack &tt = thebuilder.build(theEGamma[j].gsfTrack());
-		 
-		 const std::pair<bool,Measurement1D> &ip3dpv = IPTools::absoluteImpactParameter3D(tt,*pv);
-		 if (ip3dpv.first) {
-		   ip3d = gsfsign*ip3dpv.second.value();
-		   ip3derr = ip3dpv.second.error();
-		   ip3dSig = ip3d/ip3derr;
-		 }
-	       }
-	       int	misshits = theEGamma[j].gsfTrack()->trackerExpectedHitsInner().numberOfHits();
-	       //cout<<misshits<<endl;
-	       if(misshits<=1)
-		 {
-		   // cout<<ip3d<<" ,"<<ip3derr<<" , "<<ip3dSig<<endl;
-		   if(ip3dSig<4)
-		     {
-		       //expected inner hits should be <=1
+				 double iso =(charged+max(photon+neutral-_Rho*Aeff,0.0))/theEGamma[j].pt();
+				 
+				 if(iso<.30)
+				   {
+				     //calculate sip
+				     float ip3d    = -999.0;
+				     float ip3derr = 1.0;
+				     float ip3dSig = 0.0;
+				     
+				     if (theEGamma[j].gsfTrack().isNonnull()) {
+				       const double gsfsign = ( (-theEGamma[j].gsfTrack()->dxy(pv->position())) >=0 ) ? 1. : -1.;
+				       
+				       
+				       const reco::TransientTrack &tt = thebuilder.build(theEGamma[j].gsfTrack());
+				       
+				       const std::pair<bool,Measurement1D> &ip3dpv = IPTools::absoluteImpactParameter3D(tt,*pv);
+				       if (ip3dpv.first) {
+					 ip3d = gsfsign*ip3dpv.second.value();
+					 ip3derr = ip3dpv.second.error();
+					 ip3dSig = ip3d/ip3derr;
+				       }
+				     }
+				     int	misshits = theEGamma[j].gsfTrack()->trackerExpectedHitsInner().numberOfHits();
+				     //cout<<misshits<<endl;
+				     if(misshits==0)
+				       {
+					 bool passconversionveto = !ConversionTools::hasMatchedConversion(theEGamma[j],hConversions,beamspot.position());
+					 if(passconversionveto)
+					   {
+					     if(!(cut_mu_electron(theEGamma[j].eta(), theEGamma[j].phi())))
+					       {
+					 // cout<<ip3d<<" ,"<<ip3derr<<" , "<<ip3dSig<<endl;
+					 
+					 //expected inner hits should be <=1
+					 
+					 
 		       
-		       
-		       
-		       
-		       
-		       
-		       dReEm1[extraElectrons] = DeltaRX(etal, eta1, phil, phi1);
-		       dReEm2[extraElectrons] = DeltaRX(etal, eta2, phil, phi2);
-		       //		   if(dReEm1<.01 || dReEm2<.01)
-		       //  {
-		       Eelectron_pt[extraElectrons]=theEGamma[j].pt();
-		       Eelectron_eta[extraElectrons]=theEGamma[j].eta();
-		       //	      MC_info(etal, phil,Eelectron_pt[extraElectrons], event_);
-		       ++extraElectrons;
-		       //  }
-		     }
-		 }  
-	    }  
-	}
-      
-      
-    }  
-     }
-		 
-}
+					 
+					 
+					 
+					 dReEm1[extraElectrons] = DeltaRX(etal, eta1, phil, phi1);
+					 dReEm2[extraElectrons] = DeltaRX(etal, eta2, phil, phi2);
+					 //		   if(dReEm1<.01 || dReEm2<.01)
+					 //  {
+					 Eelectron_pt[extraElectrons]=theEGamma[j].pt();
+					 Eelectron_eta[extraElectrons]=theEGamma[j].eta();
+					 //	      MC_info(etal, phil,Eelectron_pt[extraElectrons], event_);
+					 ++extraElectrons;
+					 // 
+			    }
+					   }
+				       }
+				   }
+			       }  
+			   }  
+		       }
+		     
+		     
+		   }  
   }
+      
 }
+
+
 //=========================================================================//
 TLorentzVector TupleMaker::GetReducedMET(TLorentzVector sumJet, TLorentzVector lep1, TLorentzVector lep2, TLorentzVector metP4, int version) 
 {
@@ -1621,6 +1669,92 @@ void TupleMaker:: MC_info(double& etae, double& phie,double& pte,const Event& ev
   }
   // cout<<DoubleMuonTrigger<<endl;
 }
+
+   ///========================================================================//
+   void TupleMaker::load_pfParticles(const Event& event_)
+   {
+
+     //   Handle<reco::VertexCollection> primaryVtcs;
+     //event_.getByLabel(VERTEX_COLLECTION, primaryVtcs);
+
+     //  for(VertexCollection::const_iterator iVtx = primaryVtcs->begin(); iVtx!= primaryVtcs->end(); ++iVtx){
+ InputTag  vertexLabel(string("offlinePrimaryVertices"));
+  Handle<reco::VertexCollection> thePrimaryVertexColl;
+ 
+ event_.getByLabel(vertexLabel,thePrimaryVertexColl);
+  // if (!(primaryVtcs->size()>0))
+  Vertex dummy;
+  const Vertex *pv = &dummy;
+  if (thePrimaryVertexColl->size() != 0) {
+    pv = &*thePrimaryVertexColl->begin();
+  } else { // create a dummy PV
+    Vertex::Error e;
+    e(0, 0) = 0.0015 * 0.0015;
+    e(1, 1) = 0.0015 * 0.0015;
+    e(2, 2) = 15. * 15.;
+    Vertex::Point p(0, 0, 0);
+    dummy = Vertex(p, e, 0, 0, 0);
+  }
+  int index, iVertex;
+  Handle<PFCandidateCollection> pfCands;
+  event_.getByLabel("particleFlow",pfCands);
+  const PFCandidateCollection thePfColl = *(pfCands.product());
+
+  pf_ch=0.0;
+  pf_em=0.0;
+  pf_nh=0.0;
+  
+for(PFCandidateCollection::const_iterator it = pfCands->begin(); it<pfCands->end(); it++)
+    {
+      double teta=it->eta();
+      double tphi=it->phi();
+      //charged particles
+      if(it->particleId() == reco::PFCandidate::h)
+	{
+	  double dzmin = 10000;
+	  double ztrack = it->vertex().z();
+	  bool foundVertex = false;
+	  index = 0;
+	  for(auto iv=thePrimaryVertexColl->begin(); iv!=thePrimaryVertexColl->end(); ++iv, ++index) {
+	    
+	    double dz = fabs(ztrack - iv->z());
+	    if(dz<dzmin) {
+	      dzmin = dz; 
+	      iVertex = index;
+	      foundVertex = true;
+	    }
+	   
+	  }
+	  //	  cout<<iVertex<<" , "<<it->et()<<endl;
+	  //cout<<it->et()<<" , "<<it->particleId()<<endl;
+	  if(foundVertex && index==0)
+	    {
+	      pf_ch+= it->pt();
+	      Npfch++;
+	    }
+	}
+      //neutral particles
+      if(it->particleId() == reco::PFCandidate::h0)
+	{
+	    
+	      pf_nh+= it->pt();
+	      Npfnh++;
+	    	 
+	  //cout<<it->et()<<" , "<<it->particleId()<<endl;
+	}
+      //em particles
+      if(it->particleId() == reco::PFCandidate::gamma)
+	{
+       
+	    
+	      pf_em+= it->pt();
+	      Npfem++;
+	  // cout<<it->et()<<" , "<<it->particleId()<<endl;
+	}
+    }
+  // cout<<endl<<endl;
+  // cout<<pfiso_em<<" , "<<pfiso_ch<<" , "<<pfiso_nh<<endl;0
+   }
    //=========================================================================//
    /*
    void TupleMaker:: MC_tau(const Event& event_, double elecPhi, double elecEta)
@@ -2103,7 +2237,7 @@ void TupleMaker::load_PhiStar(const Event& event_)
 */
 
   //======================================================================//
- /*  
+ /*
   void TupleMaker::load_acceptance(const Event& event_)
   {
     InputTag  vertexLabel(string("offlinePrimaryVertices"));
@@ -2145,10 +2279,10 @@ void TupleMaker::load_PhiStar(const Event& event_)
 	//	cout<<p.pdgId()<<" , "<<p.mother()->pdgId()<<endl;
 	if(fabs(p.pdgId())==15 && p.mother()->pdgId()==23)
 	  {
-	    	cout<<p.pdgId()<<" , "<<p.mother()->pdgId()<<endl;
+	    //	    	cout<<p.pdgId()<<" , "<<p.mother()->pdgId()<<endl;
 
 		    istautau=1;
-		    cout<<istautau<<endl;
+		    //    cout<<istautau<<endl;
 	    // cout<<"istrue"<<endl;
 	  }  
 	if(p.pdgId()==23 && p.status()==3)
@@ -2455,15 +2589,21 @@ int TupleMaker::load_elec(const Event& event_, const EventSetup& setup_, int num
     event_.getByLabel("mvaTrigV0", mvaTrigV0_handle);
     const edm::ValueMap<float> ele_mvaTrigV0 = (*mvaTrigV0_handle.product());
 
-  InputTag gsfEleLabel(string("gsfElectrons"));
-  Handle<GsfElectronCollection> theEGammaCollection;
-  event_.getByLabel(gsfEleLabel,theEGammaCollection);
+		   
+
+
+      InputTag gsfEleLabel("calibratedElectrons","calibratedGsfElectrons","");
+      //			        InputTag gsfEleLabel(string("gsfElectrons"));
+ 
+ Handle<GsfElectronCollection> theEGammaCollection;
+  event_.getByLabel((InputTag)gsfEleLabel,theEGammaCollection);
   const GsfElectronCollection theEGamma = *(theEGammaCollection.product());
 
   edm::Handle<reco::PhotonCollection> photonH;
   event_.getByLabel(inputTagPhotons_,photonH);
    
   Int_t eee=0;
+		     
 
   //event_.getByLabel(genLable,genParticles);
   //InputTag  mcTruthLabel(string("generator"));
@@ -2473,16 +2613,27 @@ int TupleMaker::load_elec(const Event& event_, const EventSetup& setup_, int num
 
   //electron regression was removed temporarily for use with the singal file 8/27 some more lines need to be undeleted below as well
 
-  /*
+  
   edm::Handle<edm::ValueMap<double>> regEne_handle;
-  event_.getByLabel(edm::InputTag("eleRegressionEnergy","eneRegForGsfEle", "HLT"), regEne_handle);
+  event_.getByLabel(edm::InputTag("eleRegressionEnergy","eneRegForGsfEle", ""), regEne_handle);
   const edm::ValueMap<double> ele_regEne = (*regEne_handle.product());
 
 edm::Handle<edm::ValueMap<double>> regErr_handle;
-    event_.getByLabel(edm::InputTag("eleRegressionEnergy","eneErrorRegForGsfEle"), regErr_handle);
+ event_.getByLabel(edm::InputTag("eleRegressionEnergy","eneErrorRegForGsfEle", ""), regErr_handle);
     const edm::ValueMap<double> ele_regErr = (*regErr_handle.product());
-  */
+  
 
+
+
+edm::Handle<edm::ValueMap<double>> iso_charged_handle;
+event_.getByLabel(edm::InputTag("elPFIsoValueCharged04PFIdPFIso",""), iso_charged_handle);
+const edm::ValueMap<double> ele_iso_charged = (*iso_charged_handle.product());
+edm::Handle<edm::ValueMap<double>> iso_gamma_handle;
+event_.getByLabel(edm::InputTag("elPFIsoValueGamma04PFIdPFIso",""), iso_gamma_handle);
+const edm::ValueMap<double> ele_iso_gamma = (*iso_gamma_handle.product());
+edm::Handle<edm::ValueMap<double>> iso_neutral_handle;
+event_.getByLabel(edm::InputTag("elPFIsoValueNeutral04PFIdPFIso",""), iso_neutral_handle);
+const edm::ValueMap<double> ele_iso_neutral = (*iso_neutral_handle.product());
 
   InputTag  vertexLabel(string("offlinePrimaryVertices"));
   Handle<reco::VertexCollection> thePrimaryVertexColl;
@@ -2536,7 +2687,7 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
    typedef std::vector< edm::Handle< edm::ValueMap<double> > > IsoDepositVals;
   unsigned nTypes=3;
   IsoDepositMaps electronIsoDep(nTypes);
-
+  /*
   for (size_t j = 0; j<inputTagIsoDepElectrons_.size(); ++j) {
     event_.getByLabel(inputTagIsoDepElectrons_[j], electronIsoDep[j]);
   }
@@ -2545,7 +2696,8 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
    IsoDepositMaps photonIsoDep(nTypes);
     for (size_t j = 0; j<inputTagIsoDepPhotons_.size(); ++j) {
       event_.getByLabel(inputTagIsoDepPhotons_[j], photonIsoDep[j]);
-    }
+      }
+  
   IsoDepositVals electronIsoValPFId(nTypes);
   IsoDepositVals photonIsoValPFId(nTypes);
      const IsoDepositVals * electronIsoVals =  &electronIsoValPFId  ;
@@ -2557,10 +2709,11 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
   for (size_t j = 0; j<inputTagIsoValPhotonsPFId_.size(); ++j) {
     event_.getByLabel(inputTagIsoValPhotonsPFId_[j], photonIsoValPFId[j]);
   }
-
+  */
  
       for (uint j=0; j<theEGamma.size();j++)
   {
+
 
     eee++;
 	  bool elePresel = trainTrigPresel(theEGamma[j]);
@@ -2583,10 +2736,14 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 
       // cout<<ie.id()<<endl;
            phil = theEGamma[j].phi();
-	   etal = theEGamma[j].eta();
+	   etal = theEGamma[j].superCluster()->eta();
 
-  
-	  
+	   double ene=0.0;  
+		     
+
+	   	   ene=(float)ele_regEne.get(eee-1);
+		    
+
 
 	         reco::GsfElectronRef myElectronRef(theEGammaCollection,j);
 
@@ -2597,8 +2754,9 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 			eleceff3++;
 		       }
 
-		 if(theEGamma[j].pt()>10 && fabs(eta1)<2.4)
+		 if(theEGamma[j].pt()>10 && fabs(etal)<2.4)
 		   {
+
 		     // cout<<extraElectrons<<endl;
 		     		   
 		     if(elePresel)
@@ -2608,12 +2766,16 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 			 //  mvaTrigMthd1 = myMVATrigV0->mvaValue((theEGamma[j]),*pv,thebuilder,lazyTools,debugMVAclass);
 			 double trigValue=ele_mvaTrigV0.get(j);
 			 //	 cout<<trigValue<<endl;
-			 if((theEGamma[j].pt()<20&&((trigValue>0.00 && fabs(eta1)<.8) || (trigValue>.10 && (fabs(eta1)>.8 && fabs(eta1)<1.479)) || (trigValue>.62 && fabs(eta1)>1.479)))||((trigValue>.94 && fabs(eta1)<.8) || (trigValue>.85 && (fabs(eta1)>.8 && fabs(eta1)<1.479)) || (trigValue>.92 && fabs(eta1)>1.479)))
+			 if((theEGamma[j].pt()<20&&((trigValue>0.00 && fabs(etal)<.8) || (trigValue>.10 && (fabs(etal)>.8 && fabs(eta1)<1.479)) || (trigValue>.62 && fabs(etal)>1.479)))||((trigValue>.94 && fabs(etal)<.8) || (trigValue>.85 && (fabs(etal)>.8 && fabs(etal)<1.479)) || (trigValue>.92 && fabs(etal)>1.479)))
 		    {
+
 		      // cout<<"hello"<<endl;
-		     double charged =  (*(*electronIsoVals)[0])[myElectronRef];
-		     double photon = (*(*electronIsoVals)[1])[myElectronRef];
-		     double neutral = (*(*electronIsoVals)[2])[myElectronRef];
+					     //		     double charged =  (*(*electronIsoVals)[0])[myElectronRef];
+					     //double photon = (*(*electronIsoVals)[1])[myElectronRef];
+					     //double neutral = (*(*electronIsoVals)[2])[myElectronRef];
+		     double charged = ele_iso_charged.get(eee-1);
+		     double neutral = ele_iso_neutral.get(eee-1);
+		     double photon = ele_iso_gamma.get(eee-1);
 		     if(abs(etal)>2.4)
 		       Aeff=0.261;
 		     if(abs(etal)>2.3 && abs(etal)<2.4)
@@ -2643,6 +2805,7 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 		     // cout<<_Rho<<" , "<<Aeff<<" , "<<iso<<endl;
 	   if(iso<.15)
 	     {
+
 	       //calculate sip
 	       float ip3d    = -999.0;
 	       float ip3derr = 1.0;
@@ -2661,10 +2824,12 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
           ip3dSig = ip3d/ip3derr;
 		 }
 	       }
+
 		   int	misshits = theEGamma[j].gsfTrack()->trackerExpectedHitsInner().numberOfHits();
 		   //cout<<misshits<<endl;
 		   if(misshits==0)
 		     {
+
 
 		       bool passconversionveto = !ConversionTools::hasMatchedConversion(theEGamma[j],hConversions,beamspot.position());
 		       if(passconversionveto)
@@ -2672,6 +2837,7 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 		       // cout<<ip3d<<" ,"<<ip3derr<<" , "<<ip3dSig<<endl;
 		       //  if(ip3dSig<4)
 		       //	 {
+
 			     if(!(cut_mu_electron(theEGamma[j].eta(), theEGamma[j].phi())))
 			    {
 		   //expected inner hits should be <=1
@@ -2679,18 +2845,19 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 		   // elec1P4.SetPxPyPzE(theEGamma[j].px(), theEGamma[j].py(), theEGamma[j].pz(), theEGamma[j].p4().t());
 
 			   //   cout<<elec1P4.Px()<<" , "<<elec1P4.Py()<<" , "<<theEGamma[j].pt()<<endl;
-			      
-			      if((DeltaRX(theEGamma[j].eta(), MC1eta, theEGamma[j].phi(), MC1phi)<.1) || (DeltaRX(theEGamma[j].eta(), MC2eta, theEGamma[j].phi(), MC2phi)<.1) && passacc)
+
+			      if((DeltaRX(theEGamma[j].eta(), MC1eta, theEGamma[j].phi(), MC1phi)<.3) || (DeltaRX(theEGamma[j].eta(), MC2eta, theEGamma[j].phi(), MC2phi)<.3) && passacc)
 		       {
 			eleceff4++;
 		       }
 		    num_e++;
-		    double ene=0.0;
+		    //double ene=0.0;
 		    double err=0.0;
-		    //		    double ene=ele_regEne.get(eee-1);
-		    // double err =ele_regErr.get(eee-1);
+		       err =(float)ele_regErr.get(eee-1);
 		    //	    cout<<theEGamma[j].p4().t()<<" , "<<ene<<endl;
 		    // cout<<num_e<<endl;
+		       //			      		     cout<<"45"<<endl;
+
 			     if(num_e==1)
 			       {elecReg1=ene;
 			       eiso1=iso;
@@ -2719,6 +2886,7 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 				 elec2phi=elec1phi;
 				 elec1eta=theEGamma[j].eta();
 				 elec1phi=theEGamma[j].phi();
+
 				 elec2dxy=elec1dxy;
 				 elec1dxy=fabs(theEGamma[j].gsfTrack()->dxy(pv->position()));
 				 elec2Q=elec1Q;
@@ -2740,7 +2908,7 @@ edm::Handle<edm::ValueMap<double>> regErr_handle;
 			elec2track=theEGamma[j].gsfTrack();
 
 		       //   elec2pt=theEGamma[j].pt();
-		
+
 		  
 				   //   cout<<"else statement  "<<elec1P4.Px()<<" , "<<elec2P4.Px()<<endl;
 
@@ -2954,7 +3122,7 @@ int TupleMaker::load_muon(const Event& event_)
 	    }
 
 
-		       }
+	    }
 
       if(DeltaRX(imuon->eta(), MC2eta, imuon->phi(), MC2phi)<.1 && fabs(MC2truth)==13 && passacc)
 	{
@@ -3115,8 +3283,8 @@ void TupleMaker::load_vtxs(const Event& event_)
     reco::Vertex myVtx = reco::Vertex(*iVtx);
     if(myVtx.isValid() && !(myVtx.isFake())
                 && myVtx.ndof()         > 4.  // Number of degrees of freedom
-       && fabs(myVtx.z())      <= 24.) // Longitudinal distance from IP
-       //     && fabs(myVtx.perp())   <= 2.) // Transverse distance from IP continue;
+       && fabs(myVtx.z())      <= 24. // Longitudinal distance from IP
+       && fabs(myVtx.position().rho())   <= 2.) // Transverse distance from IP continue;
 
       {
     //TCPrimaryVtx* vtxCon = new ((*primaryVtx)[vtxCount]) TCPrimaryVtx;
@@ -3219,19 +3387,31 @@ double TupleMaker::get_lep_vz()
 void TupleMaker::load_jets(const Event& event_, const EventSetup& setup_)
 {  
   if(process_ == PROCESS_no)      return;
-  
   event_.getByLabel(JET_COLLECTION, jets);
-   
-   for(int i =0; i<10; i++)
-       {jet_pt[i]=0.0;
-       } 
+  // PUJetIdDisc = cms.InputTag("pileupJetIdProducer","fullDiscriminant")
+  //  PUJetIdFlag = cms.InputTag("pileupJetIdProducer","fullId")
+    edm::Handle<edm::ValueMap<float> > puJetIdMva;
+  event_.getByLabel(edm::InputTag("pileupJetIdProducer","fullDiscriminant"), puJetIdMva);
+  edm::Handle<edm::ValueMap<int> > puJetIdFlag;
+  event_.getByLabel(edm::InputTag("pileupJetIdProducer","fullId"), puJetIdFlag);
+  JetCorrectionUncertainty *jecUnc = new JetCorrectionUncertainty();
+  if(event_.isRealData()){
+    jecUnc->setParameters(JECuncData_);
+  }else{
+    jecUnc->setParameters(JECuncMC_);
+  }
+
+  for(int i =0; i<10; i++)
+    {jet_pt[i]=0.0;
+    } 
   PFJet cjet;
   //  cout<<endl;
   PFJetCollection::const_iterator ijet;
+  PFJetCollection::size_type ajet=0;
   //cout<<endl;
-  for(ijet = jets->begin(); ijet != jets->end(); ++ijet)
-  {
-
+  for(ijet = jets->begin(); ijet != jets->end(); ++ijet ,ajet++)
+    {
+      
     double jpt=0;
     jpt=ijet->pt();
 
@@ -3256,25 +3436,106 @@ void TupleMaker::load_jets(const Event& event_, const EventSetup& setup_)
 	 // if(cut_jet_vtx(cjet))         continue;
 	 if(noniso_jet(cjet))      
 	   {
+
+	     if(event_.isRealData())
+	       {
+		 
+		 const double corrs[5] = {0.0, -0.454e-6, -0.952e-6, 1.378e-6, 0.0};
+		 const int run0 = 201000;
+		 double eta = fabs(cjet.eta());
+		 double corr = 0.;
+		 if(eta<1.3) corr = corrs[0];
+		 else if(eta<2.0) corr = corrs[1];
+		 else if(eta<2.5) corr = corrs[2];
+		 else if(eta<3.0) corr = corrs[3];
+		 else if(eta<5.0) corr = corrs[4];
+		 //COME BACK TO THIS, GET THE BELOW TO WORK TODO
+		 //todo ewfwef
+		 
+		 //       j.p4().SetPt(j.p4().pt()*(1.+corr*(event_.id().run()-run0)));
+		 // j.p4().setPtEtaPhiE(0.,0.,0.,0.);
+		 PFJet_JECruns.push_back(1.+corr*(event_.id().run()-run0));
+					 
+					 // j.p4().SetPt(12);
+					 
+	       }
+					 
+		 else
+		   PFJet_JECruns.push_back(1.);
+
+
+	     std::vector<float> iPFJet_p4;
+
+	     iPFJet_p4.push_back(cjet.p4().E());
+	     iPFJet_p4.push_back(cjet.p4().Px());
+	     iPFJet_p4.push_back(cjet.p4().Py());
+	     iPFJet_p4.push_back(cjet.p4().Pz());
+	     PFJet_p4.push_back(iPFJet_p4);
+	     
+	     PFJetRef PFJet(jets, ajet);
+	     float puJetID_discr = (*puJetIdMva)[PFJet];
+	     int puJetID_idflag = (*puJetIdFlag)[PFJet];
+	     //PFJet->p4().SetPt(12.);	     
+	     PFJet_PUJetID_discr.push_back(puJetID_discr);
+	     PFJet_PUJetID_looseWP.push_back(PileupJetIdentifier::passJetId(puJetID_idflag, PileupJetIdentifier::kLoose));
+	     PFJet_PUJetID_mediumWP.push_back(PileupJetIdentifier::passJetId(puJetID_idflag, PileupJetIdentifier::kMedium));
+	     PFJet_PUJetID_tightWP.push_back(PileupJetIdentifier::passJetId(puJetID_idflag, PileupJetIdentifier::kTight));
+	     jecUnc->setJetEta(cjet.eta());
+	     jecUnc->setJetPt(cjet.pt());
+	     PFJet_JECuncertainty.push_back(jecUnc->getUncertainty(true));
+
 	     jet_pt[num_jets] = cjet.pt();
 	     ++num_jets;
 
 	     //cout<<sumJet.Px()<<" , "<<sumJet.Py()<<" , "<<sumJet.Pz()<<" , "<<sumJet.E()<<endl;
 	     sumJet.SetPxPyPzE(sumJet.Px()+cjet.px(), sumJet.Py()+cjet.py(),sumJet.Pz()+cjet.pz(), sumJet.E()+cjet.p4().t());
 	  
-	   }
+	       
 
-       }
-     else{
+	   }
+    
        
-      
-     }
     //      order_jets(num_jets, cjet);
     
     //jet_addons(ijet - jets->begin());
     // jet_vz[num_jets-1] = jet_vtx->z();
-  }
+       }
+    }
+  delete jecUnc;
+    
+  if(!event_.isRealData())
+    {
+      
+      
+      edm::Handle<reco::GenJetCollection> GenJetCollection;
+      event_.getByLabel(InputTag("ak5GenJets"), GenJetCollection);
+      edm::Handle<reco::GenJetCollection> GenJetNoNuCollection;
+      event_.getByLabel(InputTag("ak5GenJetsNoNu"), GenJetNoNuCollection);
+      
+      for (reco::GenJetCollection::size_type iGenJet = 0; iGenJet < GenJetCollection->size(); iGenJet++) {
+	reco::GenJetRef RefGenJet(GenJetCollection, iGenJet);
+	std::vector<float> iGenJet_p4;
+	iGenJet_p4.push_back(RefGenJet->p4().E());
+	iGenJet_p4.push_back(RefGenJet->p4().Px());
+	iGenJet_p4.push_back(RefGenJet->p4().Py());
+	iGenJet_p4.push_back(RefGenJet->p4().Pz());
+	PFJet_GenJet_p4.push_back(iGenJet_p4);
+	
+      }
+    }
+  else
   
+    {
+      	std::vector<float> iGenJet_p4;
+	iGenJet_p4.push_back(0.);
+	iGenJet_p4.push_back(0.);
+	iGenJet_p4.push_back(0.);
+	iGenJet_p4.push_back(0.);
+	PFJet_GenJet_p4.push_back(iGenJet_p4);
+    }
+
+
+
   // fill_pre_jets();
   //cout<<numberjets<<" , "<<num_jets<<endl;
   // if(num_jets < 2)    {  veto_event();    ++num_2jet_veto;  }
@@ -3289,16 +3550,22 @@ void TupleMaker::load_jets(const Event& event_, const EventSetup& setup_)
   bool TupleMaker::cut_jet(PFJet j)
 {//cout<<j.et()<<endl;
  
- bool 
-  jetcut = ((j.pt() > 30) && (fabs(j.eta()) < CUT_JET_ETA)),
-  check1 = (j.neutralEmEnergyFraction() < CUT_NEUTR_EM_EN_FRAC),
-  check2 = (j.chargedEmEnergyFraction() < CUT_CHARG_EM_EN_FRAC),
-  check3 = (j.neutralHadronEnergyFraction() < CUT_NEUTR_HAD_EN_FRAC),
-    check4 = (j.chargedHadronEnergyFraction() > CUT_CHARG_HAD_EN_FRAC),
+ bool jetcut = ((j.pt() > 10) && (fabs(j.eta()) < CUT_JET_ETA));
+ bool check2=true;
+ bool check4=true;
+ bool check5=true;
+ bool  check1 = (j.neutralEmEnergyFraction() < CUT_NEUTR_EM_EN_FRAC);
+ if(fabs(j.eta())<2.4)
+      {
+	check2 = (j.chargedEmEnergyFraction() < CUT_CHARG_EM_EN_FRAC);
+	check4 = (j.chargedHadronEnergyFraction() > CUT_CHARG_HAD_EN_FRAC);
+	check5= (j.chargedMultiplicity()>0);
+	
+	  }
+ bool check3 = (j.neutralHadronEnergy()+j.HFHadronEnergy()/j.energy()< CUT_NEUTR_HAD_EN_FRAC);
   // cout<<j.chargedMultiplicity()<<" , "<<j.neutralMultiplicity()<<endl;
   // cout<<j.et()<<" , "<<j.pt()<<endl;
-    check5= (j.chargedMultiplicity() >0),
-    check6= ((j.chargedMultiplicity()+j.neutralMultiplicity()) >0);
+ bool     check6= ((j.numberOfDaughters() >0));
     return ( jetcut && check1 && check2 && check3 && check4&&check5&&check6);
   }
 
@@ -3475,7 +3742,8 @@ double TupleMaker::deltaR_mjet(PFJet j, int which_m)
 PFJet TupleMaker::correct_jet(PFJetCollection::const_iterator org_j, 
 			      const Event& event_, const EventSetup& setup_)
 {
-  PFJet j = *org_j;  
+   PFJet j = *org_j;  
+  
   
   //  double jec_pt, org_pt = j.pt();
 
